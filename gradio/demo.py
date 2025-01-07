@@ -45,7 +45,7 @@ client = Minio(
 
 client.fget_object('industrial-cnn-models','model.pth','./model.pth')
 model = CNN().to(device)
-model.load_state_dict(torch.load('model.pth', weights_only=True))
+model.load_state_dict(torch.load('model.pth', weights_only=True, map_location=torch.device('cpu')))
 model.eval()
 
 import requests
