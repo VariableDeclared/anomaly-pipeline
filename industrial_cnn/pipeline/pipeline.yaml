@@ -1,0 +1,203 @@
+# PIPELINE DEFINITION
+# Name: train-cnn
+components:
+  comp-publish-artifact:
+    executorLabel: exec-publish-artifact
+    inputDefinitions:
+      artifacts:
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+  comp-train-model:
+    executorLabel: exec-train-model
+    outputDefinitions:
+      artifacts:
+        model_artifact:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-publish-artifact:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - publish_artifact
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'minio' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef publish_artifact(model: Model):\n    from minio import Minio,\
+          \ VersioningConfig\n    client = Minio(\"192.168.2.109:9000\",\n       \
+          \ access_key=\"t9ZqEVxN1GbrtTBltMcI\",\n        secret_key=\"KazwAJHSaFYZXnomowQ4ICIk6V26k3NQIlRzpKML\"\
+          ,\n        secure=False\n    )\n    bucket_name = \"industrial-cnn-models\"\
+          \n        # Make the bucket if it doesn't exist.\n    found = client.bucket_exists(bucket_name)\n\
+          \    if not found:\n        client.make_bucket(bucket_name)\n        client.set_bucket_versioning(\"\
+          industrial-cnn-models\", VersioningConfig('ENABLED'))\n        print(\"\
+          Created bucket\", bucket_name)\n    else:\n        print(\"Bucket\", bucket_name,\
+          \ \"already exists\")\n    destination_file = \"model.pth\"\n    # Upload\
+          \ the file, renaming it in the process\n    client.fput_object(\n      \
+          \  bucket_name, destination_file, model.path,\n    )\n    print(\n     \
+          \   model.path, \"successfully uploaded as object\",\n        destination_file,\
+          \ \"to bucket\", bucket_name,\n    )\n\n"
+        image: python:3.11
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'opencv-python'\
+          \ 'torch' 'torchvision' 'torchaudio' 'numpy' 'matplotlib' 'pillow' 'wget'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(model_artifact: Output[Model]):\n    import wget\n\
+          \    import subprocess\n    import torch\n    import torch.nn as nn\n  \
+          \  from torch.utils.data import random_split\n    from torch.utils.data.sampler\
+          \ import WeightedRandomSampler\n    from torchvision import datasets, transforms\n\
+          \    from PIL import Image\n    from torch.utils.data import DataLoader,\
+          \ Dataset\n    import matplotlib.pyplot as plt\n    import numpy as np\n\
+          \    import os\n    import warnings\n    warnings.filterwarnings(\"ignore\"\
+          )\n    minibatch_size = 20\n    learning_rate = 0.01\n    device = torch.device('cuda'\
+          \ if torch.cuda.is_available() else 'cpu')\n    wget.download(\"https://www.dropbox.com/scl/fi/z8kkui6ync57rudlx10dx/CNN_data.zip?rlkey=27787pjnnbaa3mss5nu4nbi7u&e=1&st=4q3p56fh&dl=1\"\
+          , )\n    subprocess.call(\"unzip CNN_data.zip\".split(\" \"))\n    dataset\
+          \ = \"data/Coil_Vision/01_train_val_test\"\n    def custom_loader(path):\n\
+          \        with open(path, 'rb') as f:\n            img = Image.open(f)\n\
+          \            img = img.crop((50, 60, 750, 460))  #Size: 700x400 px\n   \
+          \         img.load()\n            return img\n    # Transform function for\
+          \ loading\n    transform = transforms.Compose([transforms.ToTensor(),\n\
+          \                                    transforms.Normalize((0.5), (0.5))])\n\
+          \n    # Create dataset out of folder structure\n    dataset = datasets.ImageFolder(dataset,\
+          \ transform=transform, loader=custom_loader)\n    def val_test(dataloader,\
+          \ model):\n        # Get dataset size\n        dataset_size = len(dataloader.dataset)\n\
+          \n        # Turn off gradient calculation for validation\n        with torch.no_grad():\n\
+          \            # Loop over dataset\n            correct = 0\n            wrong_preds\
+          \ = []\n            for (images, labels) in dataloader:\n              \
+          \  images, labels = images.to(device), labels.to(device)\n\n           \
+          \     # Get raw values from model\n                output = model(images)\n\
+          \n                # Derive prediction\n                y_pred = output.argmax(1)\n\
+          \n                # Count correct classifications over all batches\n   \
+          \             correct += (y_pred == labels).type(torch.float32).sum().item()\n\
+          \n                # Save wrong predictions (image, pred_lbl, true_lbl)\n\
+          \                for i, _ in enumerate(labels):\n                    if\
+          \ y_pred[i] != labels[i]:\n                        wrong_preds.append((images[i],\
+          \ y_pred[i], labels[i]))\n\n            # Calculate accuracy\n         \
+          \   acc = correct / dataset_size\n\n        return acc, wrong_preds\n  \
+          \  class CNN(nn.Module):\n\n        def __init__(self):\n            super().__init__()\n\
+          \n            # Define model layers\n            self.model_layers = nn.Sequential(\n\
+          \n                nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5),\n\
+          \                nn.ReLU(),\n                nn.MaxPool2d(kernel_size=2,\
+          \ stride=2),\n\n                nn.Conv2d(in_channels=6, out_channels=16,\
+          \ kernel_size=5),\n                nn.ReLU(),\n                nn.MaxPool2d(kernel_size=2,\
+          \ stride=2),\n\n                nn.Flatten(),\n                nn.Linear(16*97*172,\
+          \ 120),\n                nn.ReLU(),\n                # Adding hidden layers\n\
+          \                nn.Linear(120, 120),\n                nn.Linear(120, 120),\n\
+          \                nn.Linear(120, 120),\n\n                nn.Linear(120,\
+          \ 2)\n            )\n\n        def forward(self, x):\n            out =\
+          \ self.model_layers(x)\n            return out\n    print(\"Preparing training\
+          \ data\")\n    train_set, val_set, test_set = random_split(dataset, [round(0.5*len(dataset)),\
+          \ \n                                                      round(0.3*len(dataset)),\
+          \ \n                                                      round(0.2*len(dataset))])\n\
+          \    lbls = [dataset[idx][1] for idx in train_set.indices]\n    bc = np.bincount(lbls)\n\
+          \    p_nOK = bc.sum()/bc[0]\n    p_OK = bc.sum()/bc[1]\n    lst_train =\
+          \ [p_nOK if lbl==0 else p_OK for lbl in lbls]\n    train_sampler = WeightedRandomSampler(weights=lst_train,\
+          \ num_samples=len(lbls))\n    # Define loader with batchsize\n    train_loader\
+          \ = DataLoader(dataset=train_set, batch_size=minibatch_size, sampler=train_sampler)\n\
+          \    val_loader = DataLoader(dataset=val_set, batch_size=minibatch_size,\
+          \ shuffle=True)\n    test_loader = DataLoader(dataset=test_set, shuffle=True)\n\
+          \n    # Define model on cpu or gpu\n    model = CNN().to(device)\n\n   \
+          \ # Loss and optimizer\n    loss = nn.CrossEntropyLoss()\n\n    optimizer\
+          \ = torch.optim.SGD(model.parameters(), lr=learning_rate)\n    acc_train\
+          \ = {}\n    acc_val = {}\n    epochs = 100\n    # Iterate over epochs\n\
+          \    print(\"Training the model\")\n    for epoch in range(epochs):\n  \
+          \      n_correct=0; n_samples=0; n_true_OK=0\n        for idx, (images,\
+          \ labels) in enumerate(train_loader):\n            model.train()\n     \
+          \       # Push data to gpu if available\n            images, labels = images.to(device),\
+          \ labels.to(device)\n\n            # Forward pass\n            outputs =\
+          \ model(images)\n            l = loss(outputs, labels)\n\n            #\
+          \ Backward and optimize\n            optimizer.zero_grad()\n           \
+          \ l.backward()\n            optimizer.step()\n\n            # Get prediced\
+          \ labels (.max returns (value,index))\n            _, y_pred = torch.max(outputs.data,\
+          \ 1)\n\n            # Count correct classifications\n            n_correct\
+          \ += (y_pred == labels).sum().item()\n            n_true_OK += (labels ==\
+          \ 1).sum().item()\n            n_samples += labels.size(0)\n\n        #\
+          \ At end of epoch: Eval accuracy and print information\n        if (epoch+1)\
+          \ % 2 == 0:\n            model.eval()\n            # Calculate accuracy\n\
+          \            acc_train[epoch+1] = n_correct / n_samples\n            true_OK\
+          \ = n_true_OK / n_samples\n            acc_val[epoch+1] = val_test(val_loader,\
+          \ model)[0]\n\n            # Print info\n            print (f\"Epoch [{epoch+1}/{epochs}],\
+          \ Loss: {l.item():.4f}\")\n            print(f\"      Training accuracy:\
+          \ {acc_train[epoch+1]*100:.2f}%\")\n            print(f\"      True OK:\
+          \ {true_OK*100:.3f}%\")\n            print(f\"      Validation accuracy:\
+          \ {acc_val[epoch+1]*100:.2f}%\")\n    torch.save(model.state_dict(), model_artifact.path)\n\
+          \n"
+        image: nvcr.io/nvidia/pytorch:24.12-py3
+        resources:
+          accelerator:
+            count: '1'
+pipelineInfo:
+  name: train-cnn
+root:
+  dag:
+    tasks:
+      publish-artifact:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-publish-artifact
+        dependentTasks:
+        - train-model
+        inputs:
+          artifacts:
+            model:
+              taskOutputArtifact:
+                outputArtifactKey: model_artifact
+                producerTask: train-model
+        taskInfo:
+          name: publish-artifact
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        taskInfo:
+          name: train-model
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.7.0

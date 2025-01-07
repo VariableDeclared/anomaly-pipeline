@@ -34,7 +34,8 @@ The Demo UI utilises Gradio to run inference on the created CNN model. To run th
 
 ```
 activate gradio
-python gradio.py
+pip install gradio
+python demo.py
 ```
 
 

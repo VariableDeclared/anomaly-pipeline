@@ -2,6 +2,7 @@ import torch
 from minio import Minio
 import torchvision.transforms as transforms
 import torch.nn as nn
+import os
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class CNN(nn.Module):
@@ -37,8 +38,8 @@ class CNN(nn.Module):
 
 client = Minio(
     "s3.orangebox.cloud:9000",
-    access_key="t9ZqEVxN1GbrtTBltMcI",
-    secret_key="KazwAJHSaFYZXnomowQ4ICIk6V26k3NQIlRzpKML",
+    access_key=os.environ["AWS_ACCESS_KEY_ID"],
+    secret_key=os.environ["AWS_SECRET_ACCESS_KEY"],
     secure=False,
 )
 
