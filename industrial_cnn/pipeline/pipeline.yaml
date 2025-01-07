@@ -46,14 +46,15 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef publish_artifact(model: Model):\n    from minio import Minio,\
-          \ VersioningConfig\n    client = Minio(\"192.168.2.109:9000\",\n       \
-          \ access_key=\"t9ZqEVxN1GbrtTBltMcI\",\n        secret_key=\"KazwAJHSaFYZXnomowQ4ICIk6V26k3NQIlRzpKML\"\
+          \ *\n\ndef publish_artifact(model: Model):\n    from minio import Minio\n\
+          \    from minio.commonconfig import ENABLED\n    from minio.versioningconfig\
+          \ import VersioningConfig\n    client = Minio(\"192.168.2.109:9000\",\n\
+          \        access_key=\"t9ZqEVxN1GbrtTBltMcI\",\n        secret_key=\"KazwAJHSaFYZXnomowQ4ICIk6V26k3NQIlRzpKML\"\
           ,\n        secure=False\n    )\n    bucket_name = \"industrial-cnn-models\"\
           \n        # Make the bucket if it doesn't exist.\n    found = client.bucket_exists(bucket_name)\n\
           \    if not found:\n        client.make_bucket(bucket_name)\n        client.set_bucket_versioning(\"\
-          industrial-cnn-models\", VersioningConfig('ENABLED'))\n        print(\"\
-          Created bucket\", bucket_name)\n    else:\n        print(\"Bucket\", bucket_name,\
+          industrial-cnn-models\", VersioningConfig(ENABLED))\n        print(\"Created\
+          \ bucket\", bucket_name)\n    else:\n        print(\"Bucket\", bucket_name,\
           \ \"already exists\")\n    destination_file = \"model.pth\"\n    # Upload\
           \ the file, renaming it in the process\n    client.fput_object(\n      \
           \  bucket_name, destination_file, model.path,\n    )\n    print(\n     \
