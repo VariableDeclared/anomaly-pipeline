@@ -27,6 +27,7 @@ For this demo, a combination of Minio and S3 compatible was utilised, although -
 
 There are two ways to deploy the pipeline, either run the pipeline notebook, or utilise the included pipeline.yaml.
 
+Using the pipeline.yaml - upload this to the KFP UI
 
 ### Demo UI
 
@@ -34,7 +35,7 @@ The Demo UI utilises Gradio to run inference on the created CNN model. To run th
 
 ```
 activate gradio
-python gradio.py
+python demo.py
 ```
 
 
